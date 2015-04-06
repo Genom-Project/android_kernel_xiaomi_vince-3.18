@@ -47,4 +47,4 @@ obj-$(CONFIG_CRYPTO_SKEIN)	+= skein/
 obj-$(CONFIG_UNISYSSPAR)	+= unisys/
 obj-$(CONFIG_KTRACE)		+= ktrace/
 obj-$(CONFIG_RTMM)			+= rtmm/
-
+obj-$(CONFIG_PRONTO_WLAN)	+= prima/
