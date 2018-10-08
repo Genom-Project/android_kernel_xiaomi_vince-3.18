@@ -1,0 +1,7 @@
+config MSM_HOTPLUG
+	bool "MSM hotplug by [Fluxi]"
+	depends on HOTPLUG_CPU
+	default n
+	help
+	  The MSM hotplug driver controls on-/offlining of additional cores based on current cpu load.
+
