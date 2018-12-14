@@ -3432,9 +3432,9 @@ static short find_median(short *pdata, int num)
 		*(value+i) = *(pdata+i);
 
 
-	for (i = 1; i < = num-1; i++)
+	for (i = 1; i <= num-1; i++)
 	{
-		for (j = 1; j < = num-i; j++)
+		for (j = 1; j <= num-i; j++)
 		{
 			if (*(value+j-1) <= *(value+j))
 			{
