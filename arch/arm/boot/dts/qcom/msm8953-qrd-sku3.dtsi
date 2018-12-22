@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -72,8 +71,7 @@
 	ibb-supply = <&ibb_regulator>;
 	/delete-property/ vdd-supply;
 
-	//qcom,dsi-pref-prim-pan = <&dsi_r69006_1080p_cmd>;
-        qcom,dsi-pref-prim-pan = <&dsi_otm1911_fhd_vid>;
+	qcom,dsi-pref-prim-pan = <&dsi_r69006_1080p_cmd>;
 	pinctrl-names = "mdss_default", "mdss_sleep";
 	pinctrl-0 = <&mdss_dsi_active &mdss_te_active>;
 	pinctrl-1 = <&mdss_dsi_suspend &mdss_te_suspend>;
@@ -90,30 +88,6 @@
 	qpnp,qpnp-labibb-mode = "lcd";
 };
 
-
-&dsi_otm1911_fhd_vid {
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
-	//qcom,esd-check-enabled;
-
-};
-
-&dsi_ili7807_fhdplus_vid {
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
-	//qcom,esd-check-enabled;
-
-};
-
-&dsi_otm1911_fhdplus_vid {
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
-	//qcom,esd-check-enabled;
-
-};
-
-&dsi_hx8399c_fhdplus_vid {
-	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
-	//qcom,esd-check-enabled;
-};
-
 &dsi_r69006_1080p_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 };
@@ -123,19 +97,19 @@
 };
 
 &int_codec {
-	status = "ok";
+	status = "disabled";
 };
 
 &pm8953_diangu_dig {
-	status = "ok";
+	status = "disabled";
 };
 
 &pm8953_diangu_analog {
-	status = "ok";
+	status = "disabled";
 };
 
 &ext_codec {
-	status = "disabled";
+	status = "ok";
 	qcom,model = "msm8953-sku3-tasha-snd-card";
 
 	qcom,audio-routing =
@@ -162,25 +136,25 @@
 };
 
 &slim_msm {
-	status = "disabled";
+	status = "ok";
 };
 
 &dai_slim {
-	status = "disabled";
+	status = "ok";
 };
 
 &wcd9xxx_intc {
-	status = "disabled";
+	status = "ok";
 };
 
 &clock_audio {
-	status = "disabled";
+	status = "ok";
 };
 
 &wcd9335 {
-	status = "disabled";
+	status = "ok";
 };
 
 &wcd_rst_gpio {
-	status = "disabled";
+	status = "ok";
 };
