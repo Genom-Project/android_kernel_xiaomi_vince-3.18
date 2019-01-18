@@ -2,6 +2,7 @@
  * Functions to sequence FLUSH and FUA writes.
  *
  * Copyright (C) 2011		Max Planck Institute for Gravitational Physics
+ * Copyright (C) 2019 XiaoMi, Inc.
  * Copyright (C) 2011		Tejun Heo <tj@kernel.org>
  *
  * This file is released under the GPLv2.

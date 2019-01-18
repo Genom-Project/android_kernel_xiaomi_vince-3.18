@@ -2,6 +2,7 @@
  * Block multiqueue core code
  *
  * Copyright (C) 2013-2014 Jens Axboe
+ * Copyright (C) 2019 XiaoMi, Inc.
  * Copyright (C) 2013-2014 Christoph Hellwig
  */
 #include <linux/kernel.h>
@@ -544,7 +545,7 @@ void blk_mq_rq_timed_out(struct request *req, bool reserved)
 		break;
 	}
 }
-		
+
 static void blk_mq_check_expired(struct blk_mq_hw_ctx *hctx,
 		struct request *rq, void *priv, bool reserved)
 {

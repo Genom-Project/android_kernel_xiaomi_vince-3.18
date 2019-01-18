@@ -4,6 +4,7 @@
  * HMAC: Keyed-Hashing for Message Authentication (RFC2104).
  *
  * Copyright (c) 2002 James Morris <jmorris@intercode.com.au>
+ * Copyright (C) 2019 XiaoMi, Inc.
  * Copyright (c) 2006 Herbert Xu <herbert@gondor.apana.org.au>
  *
  * The HMAC implementation is derived from USAGI.

@@ -15,6 +15,11 @@ config SH_MIPI_DSI
 config SH_LCD_MIPI_DSI
 	bool
 
+config PROJECT_VINCE
+        bool "XIAOMI E7 use"
+        ---help---
+        diff touch and lcd in E7 project.
+
 source "drivers/char/agp/Kconfig"
 
 source "drivers/gpu/vga/Kconfig"

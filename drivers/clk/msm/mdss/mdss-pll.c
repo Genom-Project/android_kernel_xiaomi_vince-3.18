@@ -1,4 +1,5 @@
 /* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2019 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -249,6 +250,7 @@ static int mdss_pll_probe(struct platform_device *pdev)
 		pll_res->index = 0;
 	}
 
+
 	pll_res->ssc_en = of_property_read_bool(pdev->dev.of_node,
 						"qcom,dsi-pll-ssc-en");
 
@@ -269,6 +271,9 @@ static int mdss_pll_probe(struct platform_device *pdev)
 		if (label && !strcmp(label, "center-spread"))
 			pll_res->ssc_center = true;
 	}
+
+	printk("[sunbo] SSC state: ssc_en = %d, frequency-hz = %u, ssc-ppm = %u, ssc_center = %d.\n",
+						pll_res->ssc_en,pll_res->ssc_freq,pll_res->ssc_ppm,pll_res->ssc_center);
 
 	pll_base_reg = platform_get_resource_byname(pdev,
 						IORESOURCE_MEM, "pll_base");

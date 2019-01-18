@@ -9,6 +9,7 @@
  * between multiple submitters when a shared tag map is used.
  *
  * Copyright (C) 2013-2014 Jens Axboe
+ * Copyright (C) 2019 XiaoMi, Inc.
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
