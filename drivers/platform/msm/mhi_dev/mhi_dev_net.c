@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -244,10 +244,10 @@ static void mhi_dev_net_read_completion_cb(void *req)
 	struct sk_buff *skb = mreq->context;
 	unsigned long   flags;
 
-	skb->len = mreq->actual_len;
+	skb->len = mreq->transfer_len;
 	skb->protocol =
 		mhi_dev_net_eth_type_trans(skb);
-	skb_put(skb, mreq->actual_len);
+	skb_put(skb, mreq->transfer_len);
 	net_handle->dev->stats.rx_packets++;
 	skb->dev = net_handle->dev;
 	netif_rx(skb);

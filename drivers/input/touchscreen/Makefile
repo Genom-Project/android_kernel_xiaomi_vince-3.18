@@ -94,3 +94,4 @@ obj-$(CONFIG_TOUCHSCREEN_TD4310)       += td4310/
 #obj-$(CONFIG_TOUCHSCREEN_IST3038C)       += ist3038c/
 obj-$(CONFIG_TOUCHSCREEN_TD4310_LANSI_E7)       += td4310_lansi_e7/
 obj-$(CONFIG_VITURALSAR)			+= vituralsar_driver.o
+obj-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET)	+= hxchipset/

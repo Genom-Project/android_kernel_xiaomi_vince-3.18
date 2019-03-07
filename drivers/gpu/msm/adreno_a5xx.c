@@ -1265,13 +1265,13 @@ static int _execute_reg_sequence(struct adreno_device *adreno_dev,
 
 	/* todo double check the reg writes */
 	while ((cur - opcode) < length) {
-		if (cur[0] == 1 && ((cur + 4) - opcode) <= length) {
+		if (cur[0] == 1 && (length - (cur - opcode) >= 4)) {
 			/* Write a 32 bit value to a 64 bit reg */
 			reg = cur[2];
 			reg = (reg << 32) | cur[1];
 			kgsl_regwrite(KGSL_DEVICE(adreno_dev), reg, cur[3]);
 			cur += 4;
-		} else if (cur[0] == 2 && ((cur + 5) - opcode) <= length) {
+		} else if (cur[0] == 2 && (length - (cur - opcode) >= 5)) {
 			/* Write a 64 bit value to a 64 bit reg */
 			reg = cur[2];
 			reg = (reg << 32) | cur[1];
@@ -1279,7 +1279,7 @@ static int _execute_reg_sequence(struct adreno_device *adreno_dev,
 			val = (val << 32) | cur[3];
 			kgsl_regwrite(KGSL_DEVICE(adreno_dev), reg, val);
 			cur += 5;
-		} else if (cur[0] == 3 && ((cur + 2) - opcode) <= length) {
+		} else if (cur[0] == 3 && (length - (cur - opcode) >= 2)) {
 			/* Delay for X usec */
 			udelay(cur[1]);
 			cur += 2;
@@ -2216,7 +2216,7 @@ static int a5xx_microcode_load(struct adreno_device *adreno_dev)
 		desc.args[1] = 13;
 		desc.arginfo = SCM_ARGS(2);
 
-		ret = scm_call2(SCM_SIP_FNID(SCM_SVC_BOOT, 0xA), &desc);
+		ret = scm_call2_atomic(SCM_SIP_FNID(SCM_SVC_BOOT, 0xA), &desc);
 		if (ret) {
 			pr_err("SCM resume call failed with error %d\n", ret);
 			return ret;
@@ -2441,8 +2441,8 @@ static int a5xx_rb_start(struct adreno_device *adreno_dev,
 	adreno_writereg(adreno_dev, ADRENO_REG_CP_RB_CNTL,
 		A5XX_CP_RB_CNTL_DEFAULT);
 
-	adreno_writereg(adreno_dev, ADRENO_REG_CP_RB_BASE,
-			rb->buffer_desc.gpuaddr);
+	adreno_writereg64(adreno_dev, ADRENO_REG_CP_RB_BASE,
+			ADRENO_REG_CP_RB_BASE_HI, rb->buffer_desc.gpuaddr);
 
 	ret = a5xx_microcode_load(adreno_dev);
 	if (ret)

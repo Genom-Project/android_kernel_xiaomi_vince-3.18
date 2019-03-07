@@ -346,8 +346,10 @@ static int kgsl_mem_entry_track_gpuaddr(struct kgsl_device *device,
 	/*
 	 * If SVM is enabled for this object then the address needs to be
 	 * assigned elsewhere
+	 * Also do not proceed further in case of NoMMU.
 	 */
-	if (kgsl_memdesc_use_cpu_map(&entry->memdesc))
+	if (kgsl_memdesc_use_cpu_map(&entry->memdesc) ||
+		(kgsl_mmu_get_mmutype(device) == KGSL_MMU_TYPE_NONE))
 		return 0;
 
 	pagetable = kgsl_memdesc_is_secured(&entry->memdesc) ?
@@ -1346,6 +1348,45 @@ long kgsl_ioctl_device_getproperty(struct kgsl_device_private *dev_priv,
 		}
 
 		kgsl_context_put(context);
+		break;
+	}
+	case KGSL_PROP_SECURE_BUFFER_ALIGNMENT:
+	{
+		unsigned int align;
+
+		if (param->sizebytes != sizeof(unsigned int)) {
+			result = -EINVAL;
+			break;
+		}
+		/*
+		 * XPUv2 impose the constraint of 1MB memory alignment,
+		 * on the other hand Hypervisor does not have such
+		 * constraints. So driver should fulfill such
+		 * requirements when allocating secure memory.
+		 */
+		align = MMU_FEATURE(&dev_priv->device->mmu,
+				KGSL_MMU_HYP_SECURE_ALLOC) ? PAGE_SIZE : SZ_1M;
+
+		if (copy_to_user(param->value, &align, sizeof(align)))
+			result = -EFAULT;
+
+		break;
+	}
+	case KGSL_PROP_SECURE_CTXT_SUPPORT:
+	{
+		unsigned int secure_ctxt;
+
+		if (param->sizebytes != sizeof(unsigned int)) {
+			result = -EINVAL;
+			break;
+		}
+
+		secure_ctxt = dev_priv->device->mmu.secured ? 1 : 0;
+
+		if (copy_to_user(param->value, &secure_ctxt,
+				sizeof(secure_ctxt)))
+			result = -EFAULT;
+
 		break;
 	}
 	default:

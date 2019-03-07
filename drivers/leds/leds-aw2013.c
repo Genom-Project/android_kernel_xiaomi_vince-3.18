@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015, 2018 The Linux Foundation. All rights reserved.
  * Copyright (C) 2019 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -454,7 +454,8 @@ static int aw_2013_check_chipid(struct aw2013_led *led)
            }
 	aw2013_write(led, AW_REG_RESET, AW_LED_RESET_MASK);
 
-	udelay(2000);
+	usleep_range(AW_LED_RESET_DELAY-2, AW_LED_RESET_DELAY);
+
 	aw2013_read(led, AW_REG_RESET, &val);
 	if (val == AW2013_CHIPID)
 		return 0;
