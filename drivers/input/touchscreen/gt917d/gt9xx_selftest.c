@@ -22,15 +22,16 @@
 
 #include "gt9xx_selftest.h"
 #include "gt9xx.h"
-#include "test_function.h"
+
 /************** Customer Config Start ***********************/
 #define GTP_SHORT_GND
 #define GTP_VDD         33
-#define GTP_TP_DATA_DUMP "goodix_rawdata_temp"
-#define DEFAULT_TEST_ITEMS  (_MAX_TEST | _MIN_TEST | _UNIFORMITY_TEST)
-u8 parse_config[250] = {(u8)(GTP_REG_CONFIG_DATA >> 8), (u8)GTP_REG_CONFIG_DATA, 0};
-u16 max_limit_value = 5200;
-u16 min_limit_value = 1800;
+
+#define DEFAULT_TEST_ITEMS  (_MAX_TEST | _MIN_TEST | _KEY_MAX_TEST | _KEY_MIN_TEST /*| _UNIFORMITY_TEST*/)
+
+u16 max_limit_value = 6000;
+u16 min_limit_value = 2500;
+u16 min_limit_value_LH = 800;
 u16 max_limit_key = 1500;
 u16 min_limit_key = 800;
 u16 uniformity_lmt = 50;
@@ -39,17 +40,11 @@ u16 uniformity_lmt = 50;
 #define _BEYOND_INFO_MAX            20
 #define GTP_OPEN_SAMPLE_NUM         16
 #define GTP_TEST_INFO_MAX           200
-static struct proc_dir_entry *gtp_data_dump_proc = NULL;
 
 static struct proc_dir_entry *gt9xx_selftest_proc;
-
+static struct proc_dir_entry *gt9xx_datadump_proc;
 int gt9xx_test_result = RESULT_INVALID;
 extern s32 gtp_read_version(struct i2c_client *client, u16 *version);
-extern s32 gtp_i2c_write(struct i2c_client *client, u8 *buf, s32 len);
-extern s32 gtp_i2c_read(struct i2c_client *client, u8 *buf, s32 len);
-extern void gtp_reset_guitar(struct i2c_client *client, s32 ms);
-extern s32 gtp_send_cfg(struct i2c_client *client);
-extern void gtp_esd_switch(struct i2c_client *, s32);
 
 extern struct i2c_client *i2c_connect_client;
 
@@ -107,22 +102,22 @@ static void append_info_line(void)
 static u8 cfg_drv_order[MAX_DRIVER_NUM];
 static u8 cfg_sen_order[MAX_SENSOR_NUM];
 
-
 static s32 gt9xx_open_send_cfg(struct i2c_client *client)
 {
 	u32 ret = 0, i = 0;
 	int retry = 0;
 	u8 check_sum;
 	struct goodix_ts_data *ts = i2c_get_clientdata(client);
+	struct goodix_config_data *cfg = &ts->pdata->config;
 
 	check_sum = 0;
 
-	for (i = GTP_ADDR_LENGTH; i < 256; i++)
-		check_sum += configTest[i];
-
+	for (i = GTP_ADDR_LENGTH; i < cfg->length; i++)
+		check_sum += config[i];
+	config[cfg->length] = (~check_sum) + 1;
 	dev_info(&ts->client->dev, "Driver send config\n");
 	for (retry = 0; retry < RETRY_MAX_TIMES; retry++) {
-		ret = gtp_i2c_write(client, configTest,
+		ret = gtp_i2c_write(client, config,
 				    GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH);
 
 		if (ret > 0)
@@ -130,7 +125,6 @@ static s32 gt9xx_open_send_cfg(struct i2c_client *client)
 	}
 	return ret;
 }
-
 /*
  * Initialize cfg_drv_order and cfg_sen_order, which is used for report short channels
  *
@@ -141,10 +135,10 @@ static s32 gt9xx_short_parse_cfg(void)
 	u8 i = 0;
 	u8 drv_num = 0, sen_num = 0;
 
-	drv_num = (configTest[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT - GT9_REG_CFG_BEG] & 0x1F)
-		  + (configTest[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 1 - GT9_REG_CFG_BEG] & 0x1F);
-	sen_num = (configTest[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 2 - GT9_REG_CFG_BEG] & 0x0F)
-		  + ((configTest[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 2 - GT9_REG_CFG_BEG] >> 4) & 0x0F);
+	drv_num = (config[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT - GT9_REG_CFG_BEG] & 0x1F)
+		  + (config[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 1 - GT9_REG_CFG_BEG] & 0x1F);
+	sen_num = (config[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 2 - GT9_REG_CFG_BEG] & 0x0F)
+		  + ((config[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 2 - GT9_REG_CFG_BEG] >> 4) & 0x0F);
 
 	if (drv_num < MIN_DRIVER_NUM || drv_num > MAX_DRIVER_NUM) {
 		pr_err("driver number error!");
@@ -159,13 +153,13 @@ static s32 gt9xx_short_parse_cfg(void)
 	memset(cfg_sen_order, 0xFF, MAX_SENSOR_NUM);
 
 	for (i = 0; i < sen_num; ++i) {
-		cfg_sen_order[i] = configTest[GTP_ADDR_LENGTH + GT9_REG_SEN_ORD - GT9_REG_CFG_BEG + i];
+		cfg_sen_order[i] = config[GTP_ADDR_LENGTH + GT9_REG_SEN_ORD - GT9_REG_CFG_BEG + i];
 	}
 
 	memset(cfg_drv_order, 0xFF, MAX_DRIVER_NUM);
 
 	for (i = 0; i < drv_num; ++i) {
-		cfg_drv_order[i] = configTest[GTP_ADDR_LENGTH + GT9_REG_DRV_ORD - GT9_REG_CFG_BEG + i];
+		cfg_drv_order[i] = config[GTP_ADDR_LENGTH + GT9_REG_DRV_ORD - GT9_REG_CFG_BEG + i];
 	}
 
 	return SUCCESS;
@@ -216,6 +210,47 @@ static s32 gtp_i2c_end_cmd(struct i2c_client *client)
 	return ret;
 }
 
+static void gtp_hopping_switch(struct i2c_client *client, s32 on)
+{
+	s32 j = 0;
+	u8 hopping_enabled = 0;
+	u8 chksum = 0;
+	struct goodix_ts_data *ts = i2c_get_clientdata(client);
+	struct goodix_config_data *cfg = &ts->pdata->config;
+
+	if (!on) {
+		if (config[GTP_ADDR_LENGTH + 0x807D - GTP_REG_CONFIG_DATA] & 0x80) {
+			pr_info("Disable hopping.");
+			config[GTP_ADDR_LENGTH + 0x807D - GTP_REG_CONFIG_DATA] &= 0x7F;
+
+			for (j = 0; j < (cfg->length - 2); ++j) {
+				chksum += config[GTP_ADDR_LENGTH + j];
+			}
+
+			config[cfg->length] = (~chksum) + 1;
+			config[cfg->length + 1] = 0x01;
+			gtp_i2c_write(client, config, GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH);
+			hopping_enabled = 1;
+			msleep(300);
+		}
+	} else if (hopping_enabled) {
+		if (0x00 == (config[GTP_ADDR_LENGTH + 0x807D - GTP_REG_CONFIG_DATA] & 0x80)) {
+			pr_info("Enable hopping.");
+			config[GTP_ADDR_LENGTH + 0x807D - GTP_REG_CONFIG_DATA] |= 0x80;
+
+			for (j = 0; j < (cfg->length - 2); ++j) {
+				chksum += config[GTP_ADDR_LENGTH + j];
+			}
+
+			config[cfg->length] = (~chksum) + 1;
+			config[cfg->length + 1] = 0x01;
+			gtp_i2c_write(client, config, GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH);
+			hopping_enabled = 0;
+			msleep(300);
+		}
+	}
+}
+
 static s32 gtp_parse_config(struct i2c_client *client)
 {
 	u8 i = 0;
@@ -223,16 +258,10 @@ static s32 gtp_parse_config(struct i2c_client *client)
 	u8 key_val = 0;
 	u8 type_buf[12] = {0x80, 0x00};
 
- if (gtp_i2c_read(client, parse_config, GTP_CONFIG_MAX_LENGTH + GTP_ADDR_LENGTH) <= 0)
-	{
-		GTP_DEBUG("Failed to read config!");
-		return FAIL;
-	}
-
-	gt9xx_drv_num = (configTest[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT - GT9_REG_CFG_BEG] & 0x1F)
-			+ (configTest[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 1 - GT9_REG_CFG_BEG] & 0x1F);
-	gt9xx_sen_num = (configTest[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 2 - GT9_REG_CFG_BEG] & 0x0F)
-			+ ((configTest[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 2 - GT9_REG_CFG_BEG] >> 4) & 0x0F);
+	gt9xx_drv_num = (config[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT - GT9_REG_CFG_BEG] & 0x1F)
+			+ (config[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 1 - GT9_REG_CFG_BEG] & 0x1F);
+	gt9xx_sen_num = (config[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 2 - GT9_REG_CFG_BEG] & 0x0F)
+			+ ((config[GTP_ADDR_LENGTH + GT9_REG_SEN_DRV_CNT + 2 - GT9_REG_CFG_BEG] >> 4) & 0x0F);
 	pr_info("Driver num: %d, Sensor Num: %d", gt9xx_drv_num, gt9xx_sen_num);
 
 	if (gt9xx_drv_num < MIN_DRIVER_NUM || gt9xx_drv_num > MAX_DRIVER_NUM) {
@@ -256,7 +285,7 @@ static s32 gtp_parse_config(struct i2c_client *client)
 		pr_info("Chip type: GT9XXF");
 	}
 
-	have_key = configTest[0x804E - GT9_REG_CFG_BEG + GTP_ADDR_LENGTH] & 0x01;
+	have_key = config[0x804E - GT9_REG_CFG_BEG + GTP_ADDR_LENGTH] & 0x01;
 
 	if (!have_key) {
 		pr_info("No key");
@@ -274,7 +303,7 @@ static s32 gtp_parse_config(struct i2c_client *client)
 
 	for (i = 0; i < 4; ++i) {
 		/* all keys are multiples of 0x08 -> isolated keys */
-		key_val = configTest[GTP_ADDR_LENGTH + GT9_REG_KEY_VAL - GT9_REG_CFG_BEG + i];
+		key_val = config[GTP_ADDR_LENGTH + GT9_REG_KEY_VAL - GT9_REG_CFG_BEG + i];
 		key_pos = key_val % 0x08;
 		GTP_DEBUG("key_val[%d] = 0x%02x", i + 1, key_val);
 
@@ -818,7 +847,7 @@ static s32 gt9xx_short_test(struct i2c_client *client)
 	u8 retry_load = 0;
 	u8 old_i2c_addr = client->addr;
 
-	disable_irq(ts->client->irq);
+	disable_irq(client->irq);
 #ifdef GTP_ESD_PROTECT
 	ts->gtp_is_suspend = 1;
 #endif
@@ -833,11 +862,11 @@ static s32 gt9xx_short_test(struct i2c_client *client)
 	}
 
 load_dsp_again:
-	pinctrl_select_state(ts->ts_pinctrl, ts->erst_output_low);
+	gpio_direction_output(ts->pdata->rst_gpio, 0);
 	msleep(30);
-	pinctrl_select_state(ts->ts_pinctrl, ts->eint_output_low);
+	gtp_int_output(ts, client->addr == 0x14);
 	usleep_range(2000, 3000);		/*  T3: > 100us (2ms)*/
-	pinctrl_select_state(ts->ts_pinctrl, ts->erst_output_high);
+	gpio_direction_output(ts->pdata->rst_gpio, 1);
 	usleep_range(6000, 7000);		/*  T4: > 5ms */
 	msleep((retry_load) * 10);
 
@@ -1092,7 +1121,7 @@ load_dsp_again:
 	gtp_write_register(client, _rRW_MISCTL__BOOTCTL_B0_, 0x08);
 	client->addr = old_i2c_addr;
 	gt9xx_leave_short_test(client);
-	enable_irq(ts->client->irq);
+	enable_irq(client->irq);
 #ifdef GTP_ESD_PROTECT
 	ts->gtp_is_suspend = 0;
 #endif
@@ -1103,7 +1132,7 @@ short_test_exit:
 	gtp_write_register(client, _rRW_MISCTL__BOOTCTL_B0_, 0x08);
 	client->addr = old_i2c_addr;
 	gt9xx_leave_short_test(client);
-	enable_irq(ts->client->irq);
+	enable_irq(client->irq);
 #ifdef GTP_ESD_PROTECT
 	ts->gtp_is_suspend = 0;
 #endif
@@ -1275,7 +1304,7 @@ have_error:
 	return FAIL;
 }
 
-static s32 gtp_read_diffdata(struct i2c_client *client, u16 *data)
+static s32 gtp_read_diffdata(struct i2c_client *client, int *data)
 {
 	s32 ret = -1;
 	u16 retry = 0;
@@ -1415,6 +1444,11 @@ static void gtp_raw_min_test(u16 *raw_buf)
 
 	for (i = 0; i < gt9xx_sc_pxl_cnt; i++) {
 		if (raw_buf[i] < min_limit_value) {
+			if ((i % gt9xx_sen_num == 0) && ((i / gt9xx_sen_num == 5) || (i / gt9xx_sen_num == 6) || (i / gt9xx_sen_num == 7) || (i / gt9xx_sen_num == 8))){
+				if (raw_buf[i] > min_limit_value_LH){
+					continue;
+				}
+			}
 			test_rslt_buf[rslt_buf_idx] |= _BEYOND_MIN_LIMIT;
 			driver = (i / gt9xx_sen_num);
 			sensor = (i % gt9xx_sen_num);
@@ -1873,26 +1907,25 @@ static s32 gt9xx_open_test(struct i2c_client *client)
 {
 	u16 i = 0;
 	s32 ret = FAIL;
-	struct goodix_ts_data *ts = i2c_get_clientdata(i2c_connect_client);
+
 	u16 *raw_buf = NULL;
 
-	disable_irq(ts->client->irq);
+	disable_irq(client->irq);
 #ifdef GTP_ESD_PROTECT
 	ts->gtp_is_suspend = 1;
 #endif
 	/*  ts->gtp_rawdiff_mode = 1;*/
 	SET_INFO_LINE_INFO("---gtp open test---");
 	pr_info("Parsing configuration...");
+	gtp_hopping_switch(client, 0);
 	ret = gtp_parse_config(client);
+
 	if (ret == FAIL) {
 		SET_INFO_LINE_ERR("failed to parse config...");
 		ret = FAIL;
 		goto open_test_exit;
 	}
-
-
 	gt9xx_open_send_cfg(client);
-
 
 	raw_buf = (u16 *)kzalloc(sizeof(u16) * (gt9xx_drv_num * gt9xx_sen_num), GFP_KERNEL);
 
@@ -1904,6 +1937,7 @@ static s32 gt9xx_open_test(struct i2c_client *client)
 
 	pr_info("Step 1: Send Rawdata Cmd");
 	ret = gtp_raw_test_init();
+
 	if (FAIL == ret) {
 		SET_INFO_LINE_ERR("Allocate memory for open test failed!");
 		ret = FAIL;
@@ -1911,6 +1945,7 @@ static s32 gt9xx_open_test(struct i2c_client *client)
 	}
 
 	ret = gt9_read_raw_cmd(client);
+
 	if (ret == FAIL) {
 		SET_INFO_LINE_ERR("Send Read Rawdata Cmd failed!");
 		ret = FAIL;
@@ -1922,6 +1957,7 @@ static s32 gt9xx_open_test(struct i2c_client *client)
 	for (i = 0; i < GTP_OPEN_SAMPLE_NUM; ++i) {
 		rslt_buf_idx = i;
 		ret = gtp_read_rawdata(client, raw_buf);
+
 		if (ret == FAIL) {
 			SET_INFO_LINE_ERR("Read Rawdata failed!");
 			ret = FAIL;
@@ -1961,14 +1997,14 @@ open_test_exit:
 		touchpad_sum = NULL;
 	}
 
-	enable_irq(ts->client->irq);
+	enable_irq(client->irq);
 #ifdef GTP_ESD_PROTECT
 	ts->gtp_is_suspend = 0;
 #endif
 	/* ts->gtp_rawdiff_mode = 0;*/
 	gt9_read_coor_cmd(client);
 	SET_INFO_LINE_INFO("---gtp open test end---");
-	msleep(50);
+	gtp_hopping_switch(client, 1);
 	gtp_reset_guitar(client, 20);
 	gtp_send_cfg(client);
 	return ret;
@@ -1998,8 +2034,8 @@ static int gt9xx_get_and_format_rawdata(u8 *buff, struct i2c_client *client)
 		ret = FAIL;
 		goto fail;
 	}
-	ret = gt9_read_raw_cmd(client);
 
+	ret = gt9_read_raw_cmd(client);
 	if (ret == FAIL) {
 		SET_INFO_LINE_ERR("Send Read Rawdata Cmd failed!");
 		goto fail;
@@ -2040,7 +2076,7 @@ fail:
 static int gt9xx_get_and_format_diffdata(u8 *buff, struct i2c_client *client)
 {
 	int ret = 0, j = 0;
-	u16 *raw_buf = NULL;
+	int *raw_buf = NULL;
 	u8 *temp_buf = NULL;
 
 	ret = gtp_parse_config(client);
@@ -2049,7 +2085,7 @@ static int gt9xx_get_and_format_diffdata(u8 *buff, struct i2c_client *client)
 		return 0;
 	}
 
-	raw_buf = (u16 *)vmalloc(sizeof(int) * (gt9xx_drv_num * gt9xx_sen_num));
+	raw_buf = (int *)vmalloc(sizeof(int) * (gt9xx_drv_num * gt9xx_sen_num));
 	if (raw_buf == NULL) {
 		SET_INFO_LINE_ERR("alloc memory err!");
 		return 0;
@@ -2119,20 +2155,16 @@ static ssize_t gt9xx_tp_selftest_read(struct file *file, char __user *buf,
 
 static int gt9xx_i2c_test(struct i2c_client *client)
 {
-	s32 ret = -1;
-	ret = gtp_i2c_test(client);
-	printk("<<-gt9xx_i2c_test->>-----ret: %d\n", ret);
-	if (ret)
-		return SUCCESS;
-	else
+	if (gtp_i2c_test(client))
 		return FAIL;
+	else
+		return SUCCESS;
 }
 
 static ssize_t gt9xx_tp_selftest_write(struct file *file, const char __user *buf,
 				       size_t count, loff_t *pos)
 {
-	unsigned char tmp[6];
-	int buflen = count;
+	char tmp[6];
 	int retval;
 	struct goodix_ts_data *ts = NULL;
 
@@ -2142,41 +2174,28 @@ static ssize_t gt9xx_tp_selftest_write(struct file *file, const char __user *buf
 		goto out;
 	}
 
-	if (copy_from_user(&tmp, buf, buflen)) {
+	if (copy_from_user(tmp, buf, count)) {
 		retval = -EFAULT;
 		gt9xx_test_result = RESULT_INVALID;
 		goto out;
 	}
 
-	printk("<<-gt9xx_tp_selftest_write->>-----tmp: %s\n", tmp);
-
 	ts = i2c_get_clientdata(i2c_connect_client);
+	gtp_esd_off(ts);
 
-	gtp_esd_switch(i2c_connect_client, SWITCH_OFF);
-
-	/*if (!strncmp(tmp, "short", 5)) {
+	if (!strncmp(tmp, "short", 5)) {
 		retval = gt9xx_short_test(i2c_connect_client);
 	} else if (!strncmp(tmp, "open", 4))
 		retval = gt9xx_open_test(i2c_connect_client);
 	else if (!strncmp(tmp, "i2c", 3))
-		retval = gt9xx_i2c_test(i2c_connect_client);*/
-
-
-	retval = gt9xx_short_test(i2c_connect_client);
-	if ( retval == SUCCESS) {
-	    retval = gt9xx_open_test(i2c_connect_client);
-	}
-	if (retval == SUCCESS) {
 		retval = gt9xx_i2c_test(i2c_connect_client);
-	}
 
 	if (retval == FAIL)
 		gt9xx_test_result = RESULT_NG;
 	else
 		gt9xx_test_result = RESULT_PASS;
 
-
-	gtp_esd_switch(i2c_connect_client, SWITCH_ON);
+	gtp_esd_on(ts);
 out:
 
 	if (retval >= 0)
@@ -2202,11 +2221,13 @@ static ssize_t gt9xx_tp_datadump_read(struct file *file, char __user *buf, size_
 	if (tmp == NULL)
 		return 0;
 	disable_irq(ts->client->irq);
-	cnt = gt9xx_get_and_format_rawdata(tmp, i2c_connect_client);
+
+	snprintf(tmp, 16, "Tx: %2d, Rx: %2d\n", gt9xx_drv_num, gt9xx_sen_num);
+	cnt = gt9xx_get_and_format_diffdata(tmp, i2c_connect_client);
 	if (cnt == 0)
 		goto out;
 
-	ret = gt9xx_get_and_format_diffdata(tmp + cnt, i2c_connect_client);
+	ret = gt9xx_get_and_format_rawdata(tmp + cnt, i2c_connect_client);
 	if (ret == 0)
 		goto out;
 	if (copy_to_user(buf, tmp, cnt + ret))
@@ -2229,151 +2250,14 @@ static const struct file_operations gt9xx_tp_datadump_ops = {
 
 void gtp_test_sysfs_init(void)
 {
-	gt9xx_selftest_proc = proc_create("tp_selftest", 0777, NULL, &tp_selftest_ops);
-
+	gt9xx_selftest_proc = proc_create("tp_selftest", 0664, NULL, &tp_selftest_ops);
+	gt9xx_datadump_proc = proc_create("tp_data_dump", 0444, NULL, &gt9xx_tp_datadump_ops);
 }
 
 void gtp_test_sysfs_deinit(void)
 {
 	if (gt9xx_selftest_proc)
 		remove_proc_entry("tp_selftest", NULL);
-
-
+	if (gt9xx_datadump_proc)
+		remove_proc_entry("tp_data_dump", NULL);
 }
-
-static int tp_data_dump_proc_show(struct seq_file *m, void *v) {
-
-
-
-	return 0;
-}
-static int tp_data_dump_proc_open(struct inode *inode, struct file * file) {
-	s32 ret = FAIL;
-	struct goodix_ts_data *ts;
-	u16 *rawdata_buf = NULL;
-	u16 *diffdata_buf = NULL;
-	struct i2c_client* client = i2c_connect_client;
-	ts = i2c_get_clientdata(client);
-
-	GTP_DEBUG("------------------------enter gtp cat proc data-------------------");
-	disable_irq(ts->client->irq);
-
-	gtp_esd_switch(i2c_connect_client, SWITCH_OFF);
-	GTP_DEBUG("Parsing configuration...");
-	ret = gtp_parse_config(client);
-	if (ret == FAIL)
-	{
-		GTP_DEBUG("failed to parse config...");
-		ret = FAIL;
-		goto open_test_exit;
-	}
-	rawdata_buf = (u16*)kmalloc(sizeof(u16)* (gt9xx_drv_num*gt9xx_sen_num), GFP_KERNEL);
-
-	if (NULL == rawdata_buf)
-	{
-		GTP_DEBUG("failed to allocate mem for rawdata_buf!");
-		ret = FAIL;
-		goto open_test_exit;
-	}
-	diffdata_buf = (u16*)kmalloc(sizeof(u16)* (gt9xx_drv_num*gt9xx_sen_num), GFP_KERNEL);
-	if (NULL == diffdata_buf)
-	{
-		GTP_DEBUG("failed to allocate mem for diffdata_buf!");
-		ret = FAIL;
-		goto open_test_exit;
-	}
-
-	ret = gtp_raw_test_init();
-	if (FAIL == ret)
-	{
-		GTP_DEBUG("Allocate memory for open test failed!");
-		ret = FAIL;
-		goto open_test_exit;
-	}
-	GTP_DEBUG("\nStep 1: Send Rawdata Cmd");
-	ret = gt9_read_raw_cmd(client);
-	if (ret == FAIL)
-	{
-		GTP_DEBUG("Send Read Rawdata Cmd failed!");
-		ret = FAIL;
-		goto open_test_exit;
-	}
-
-	GTP_DEBUG("Step 2: Sample Diffdata");
-	msleep(80);
-	ret = gtp_read_diffdata(client, diffdata_buf);
-	if (ret == FAIL)
-	{
-		GTP_DEBUG("Read Diffdata failed!");
-		ret = FAIL;
-		goto open_test_exit;
-	}
-
-	GTP_DEBUG("Step 3: Sample Rawdata");
-	ret = gtp_read_rawdata(client, rawdata_buf);
-	if (ret == FAIL)
-	{
-		GTP_DEBUG("Read Rawdata failed!");
-		ret = FAIL;
-		goto open_test_exit;
-	}
-
-
-	ret=Save_testing_data(diffdata_buf, 0x0007, rawdata_buf);
-	if(ret<0)
-	{
-		 GTP_DEBUG("save rawdata to csv error!");
-		ret = FAIL;
-		goto open_test_exit;
-	}
-
-
-open_test_exit:
-	if (rawdata_buf)
-	{
-		kfree(rawdata_buf);
-	}
-
-   if (diffdata_buf)
-	{
-		kfree(diffdata_buf);
-	}
-
-	if (test_rslt_buf)
-	{
-		kfree(test_rslt_buf);
-		test_rslt_buf = NULL;
-	}
-	if (touchpad_sum)
-	{
-		kfree(touchpad_sum);
-		touchpad_sum = NULL;
-	}
-	enable_irq(ts->client->irq);
-
-	gtp_esd_switch(i2c_connect_client, SWITCH_ON);
-	gt9_read_coor_cmd(client);
-	GTP_DEBUG("------------------------leave gtp cat proc data-------------------");
-
-	return single_open(file, tp_data_dump_proc_show, NULL);
-}
-static const struct file_operations tp_data_dump_proc_fops = {
-	.owner = THIS_MODULE,
-	.open = tp_data_dump_proc_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-
-int create_gtp_data_dump_proc(void){
-	int ret = 0;
-
-	GTP_DEBUG("%s:ENTER Cat Proc ---- %d\n", __func__, __LINE__);
-	gtp_data_dump_proc = proc_create(GTP_TP_DATA_DUMP, 0444, NULL, &tp_data_dump_proc_fops);
-	if (gtp_data_dump_proc == NULL){
-		GTP_DEBUG("fts, create_proc_entry tp_data_dump_proc failed\n");
-		ret = -1;
-	}
-	return ret;
-}
-
