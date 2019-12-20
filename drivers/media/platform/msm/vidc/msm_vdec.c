@@ -1,5 +1,4 @@
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
- * Copyright (C) 2019 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1496,10 +1495,10 @@ static int msm_vdec_queue_setup(struct vb2_queue *q,
 				V4L2_PIX_FMT_VP9 &&
 				*num_buffers < MIN_NUM_OUTPUT_BUFFERS_VP9)
 			*num_buffers = MIN_NUM_OUTPUT_BUFFERS_VP9;
-	 else if (inst->fmts[OUTPUT_PORT].fourcc ==
-			 V4L2_PIX_FMT_HEVC &&
-			 *num_buffers < MIN_NUM_OUTPUT_BUFFERS_HEVC)
-			 *num_buffers = MIN_NUM_OUTPUT_BUFFERS_HEVC;
+		else if (inst->fmts[OUTPUT_PORT].fourcc ==
+				V4L2_PIX_FMT_HEVC &&
+				*num_buffers < MIN_NUM_OUTPUT_BUFFERS_HEVC)
+			*num_buffers = MIN_NUM_OUTPUT_BUFFERS_HEVC;
 
 		for (i = 0; i < *num_planes; i++) {
 			sizes[i] = get_frame_size(inst,

@@ -24,6 +24,10 @@
 #include <linux/qpnp/pwm.h>
 #include <linux/err.h>
 #include <linux/string.h>
+#include <linux/spinlock.h>
+#ifdef CONFIG_MIPI_DSI_TC358762_DSI2DPI
+#include "mipi_tc358762_dsi2dpi.h"
+#endif
 
 #include "mdss_dsi.h"
 #ifdef TARGET_HW_MDSS_HDMI
@@ -47,6 +51,7 @@ int LCM_effect[4]={0x2,0xf0,0xf00,0xf000};
 int LCM_effect[3]={0x2,0xf0,0xf00};
 #endif
 DEFINE_LED_TRIGGER(bl_led_trigger);
+static DEFINE_SPINLOCK(led_lock);
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -76,6 +81,61 @@ bool mdss_dsi_panel_pwm_enable(struct mdss_dsi_ctrl_pdata *ctrl)
 
 end:
 	return status;
+}
+
+static int thirdparty_bl_set_gpio(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
+					int level)
+{
+	static int bl_array[] = {255, 239, 223, 207, 191, 175, 160, 144,
+				128, 112, 96, 80, 64, 48, 32, 16, 0};
+	int ret = 0, levelIndex = 0, triggerValue = 0;
+	static int last_levelIndex = 0, last_level = -1;
+
+	if (0 == level) {
+		if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
+			gpio_set_value((ctrl_pdata->bklt_en_gpio), 0);
+			mdelay(3);
+			last_levelIndex = -1;
+			return ret;
+		}
+	}
+	while (level < bl_array[levelIndex])
+		levelIndex++;
+
+	if (levelIndex > 15)
+		levelIndex = 15;
+
+	if (levelIndex == last_levelIndex) {
+		last_level = level;
+		return ret;
+	}
+	if (last_levelIndex < levelIndex) {
+		spin_lock(&led_lock);
+		for (triggerValue = 0; triggerValue <
+			(levelIndex - last_levelIndex) ; triggerValue++) {
+			gpio_set_value(ctrl_pdata->bklt_en_gpio, 0);
+			udelay(1);
+			gpio_set_value(ctrl_pdata->bklt_en_gpio, 1);
+			udelay(1);
+		}
+		spin_unlock(&led_lock);
+		last_levelIndex = levelIndex;
+		last_level = level;
+		return ret;
+	}
+
+	spin_lock(&led_lock);
+	for (triggerValue = 0; triggerValue <
+		(15 - last_levelIndex + levelIndex + 1); triggerValue++) {
+		gpio_set_value(ctrl_pdata->bklt_en_gpio, 0);
+		udelay(1);
+		gpio_set_value(ctrl_pdata->bklt_en_gpio, 1);
+		udelay(1);
+	}
+	spin_unlock(&led_lock);
+	last_levelIndex = levelIndex;
+	last_level = level;
+	return ret;
 }
 
 static void mdss_dsi_panel_bklt_pwm(struct mdss_dsi_ctrl_pdata *ctrl, int level)
@@ -111,7 +171,6 @@ static void mdss_dsi_panel_bklt_pwm(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 
 	pr_debug("%s: ndx=%d level=%d duty=%d\n", __func__,
 					ctrl->ndx, level, duty);
-
 	if (ctrl->pwm_period >= USEC_PER_SEC) {
 		ret = pwm_config_us(ctrl->pwm_bl, duty, ctrl->pwm_period);
 		if (ret) {
@@ -463,14 +522,15 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 				if (pdata->panel_info.rst_seq[++i])
 					usleep_range(pinfo->rst_seq[i] * 1000, pinfo->rst_seq[i] * 1000);
 			}
-
-			if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
-				rc = gpio_direction_output(
-					ctrl_pdata->bklt_en_gpio, 1);
-				if (rc) {
-					pr_err("%s: unable to set dir for bklt gpio\n",
-						__func__);
-					goto exit;
+			if (ctrl_pdata->bklt_ctrl != BL_THIRDPARTY) {
+				if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
+					rc = gpio_direction_output(
+						ctrl_pdata->bklt_en_gpio, 1);
+					if (rc) {
+						pr_err("%s: unable to set dir for bklt gpio\n",
+							__func__);
+						goto exit;
+					}
 				}
 			}
 		}
@@ -537,6 +597,7 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
 	#endif
 		gpio_free(ctrl_pdata->rst_gpio);
+		
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
 			gpio_free(ctrl_pdata->mode_gpio);
 	}
@@ -857,6 +918,9 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	case BL_PWM:
 		mdss_dsi_panel_bklt_pwm(ctrl_pdata, bl_level);
 		break;
+	case BL_THIRDPARTY:
+		thirdparty_bl_set_gpio(ctrl_pdata, bl_level);
+		break;
 	case BL_DCS_CMD:
 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
 			mdss_dsi_panel_bklt_dcs(ctrl_pdata, bl_level);
@@ -938,6 +1002,12 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	}
 
 	pinfo = &pdata->panel_info;
+#ifdef CONFIG_MIPI_DSI_TC358762_DSI2DPI
+	if (pinfo->use_dsi2dpi_bridge) {
+		tc358762_resume();
+		mdelay(20);
+	}
+#endif
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
@@ -1195,6 +1265,8 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
 
 	mdss_dsi_panel_off_hdmi(ctrl, pinfo);
+	if (pinfo->use_dsi2dpi_bridge)
+		mdelay(20);
 
 end:
 	/* clear idle state */
@@ -2477,6 +2549,10 @@ int mdss_panel_parse_bl_settings(struct device_node *np,
 			}
 		} else if (!strcmp(data, "bl_ctrl_dcs")) {
 			ctrl_pdata->bklt_ctrl = BL_DCS_CMD;
+			pr_debug("%s: Configured DCS_CMD bklt ctrl\n",
+								__func__);
+		} else if (!strcmp(data, "bl_thirdparty_ctrl")) {
+			ctrl_pdata->bklt_ctrl = BL_THIRDPARTY;
 			pr_debug("%s: Configured DCS_CMD bklt ctrl\n",
 								__func__);
 		}

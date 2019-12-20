@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -74,9 +74,6 @@ static int32_t msm_buf_mngr_get_buf(struct msm_buf_mngr_device *dev,
 	new_entry->session_id = buf_info->session_id;
 	new_entry->stream_id = buf_info->stream_id;
 	new_entry->index = new_entry->vb2_buf->v4l2_buf.index;
-	spin_lock_irqsave(&dev->buf_q_spinlock, flags);
-	list_add_tail(&new_entry->entry, &dev->buf_qhead);
-	spin_unlock_irqrestore(&dev->buf_q_spinlock, flags);
 	buf_info->index = new_entry->vb2_buf->v4l2_buf.index;
 	if (buf_info->type == MSM_CAMERA_BUF_MNGR_BUF_USER) {
 		mutex_lock(&dev->cont_mutex);
@@ -89,6 +86,16 @@ static int32_t msm_buf_mngr_get_buf(struct msm_buf_mngr_device *dev,
 		}
 		mutex_unlock(&dev->cont_mutex);
 	}
+	if (!rc) {
+		spin_lock_irqsave(&dev->buf_q_spinlock, flags);
+		list_add_tail(&new_entry->entry, &dev->buf_qhead);
+		spin_unlock_irqrestore(&dev->buf_q_spinlock, flags);
+	} else {
+		pr_err("List not empty or msm_buf_mngr_hdl_cont_get_buf failed %pK\n",
+			new_entry->vb2_buf);
+		kfree(new_entry);
+	}
+
 	return rc;
 }
 
@@ -548,14 +555,17 @@ static long msm_buf_mngr_subdev_ioctl(struct v4l2_subdev *sd,
 				return -EINVAL;
 			if (!k_ioctl.ioctl_ptr)
 				return -EINVAL;
-
-			MSM_CAM_GET_IOCTL_ARG_PTR(&tmp, &k_ioctl.ioctl_ptr,
-				sizeof(tmp));
-			if (copy_from_user(&buf_info, tmp,
-				sizeof(struct msm_buf_mngr_info))) {
-				return -EFAULT;
+			if (!is_compat_task()) {
+				MSM_CAM_GET_IOCTL_ARG_PTR(&tmp,
+					&k_ioctl.ioctl_ptr, sizeof(tmp));
+				if (copy_from_user(&buf_info,
+					(void __user *)tmp,
+					sizeof(struct msm_buf_mngr_info))) {
+					return -EFAULT;
+				}
+				k_ioctl.ioctl_ptr = (uintptr_t)&buf_info;
 			}
-			k_ioctl.ioctl_ptr = (uintptr_t)&buf_info;
+
 			argp = &k_ioctl;
 			rc = msm_cam_buf_mgr_ops(cmd, argp);
 			}

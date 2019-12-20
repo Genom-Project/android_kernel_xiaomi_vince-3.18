@@ -3,7 +3,7 @@
  * Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2019 XiaoMi, Inc.
  * Author: Brian Swetland <swetland@google.com>
- * Copyright (c) 2009-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2019, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -331,6 +331,7 @@ struct msm_otg_platform_data {
 	bool enable_axi_prefetch;
 	bool enable_sdp_typec_current_limit;
 	bool vbus_low_as_hostmode;
+	int charging_current_limit;
 };
 
 /* phy related flags */

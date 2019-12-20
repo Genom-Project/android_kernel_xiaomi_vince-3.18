@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2017,2019 The Linux Foundation. All rights reserved.
  * Copyright (C) 2019 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -362,6 +362,7 @@ struct msm_fb_data_type {
 	bool mdss_fb_split_stored;
 
 	u32 wait_for_kickoff;
+	u32 skip_koff_wait;
 	u32 thermal_level;
 
 	int fb_mmap_type;

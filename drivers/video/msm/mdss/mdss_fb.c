@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2007 Google Incorporated
  * Copyright (C) 2019 XiaoMi, Inc.
- * Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2017,2019 The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -3696,7 +3696,10 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 
 	commit_v1 = &commit->commit_v1;
 	if (commit_v1->flags & MDP_VALIDATE_LAYER) {
-		ret = mdss_fb_wait_for_kickoff(mfd);
+		ret = 0;
+		if (!mfd->skip_koff_wait)
+			ret = mdss_fb_wait_for_kickoff(mfd);
+
 		if (ret) {
 			pr_err("wait for kickoff failed\n");
 		} else {
